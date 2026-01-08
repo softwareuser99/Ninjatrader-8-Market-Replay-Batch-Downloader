@@ -134,6 +134,7 @@ class TradingTerminalGUI:
         mode_frame.grid(row=1, column=1, sticky="w", padx=5, pady=8)
         self.mining_mode = tk.StringVar(value="deep")
         tk.Radiobutton(mode_frame, text="Deep History", variable=self.mining_mode, value="deep", font=("Consolas", 9), bg=COLORS['bg_panel'], fg=COLORS['text_primary'], selectcolor=COLORS['bg_dark'], activebackground=COLORS['bg_panel'], activeforeground=COLORS['accent_green']).pack(side="left")
+        tk.Radiobutton(mode_frame, text="Single Contract", variable=self.mining_mode, value="single", font=("Consolas", 9), bg=COLORS['bg_panel'], fg=COLORS['text_primary'], selectcolor=COLORS['bg_dark'], activebackground=COLORS['bg_panel'], activeforeground=COLORS['accent_green']).pack(side="left")
 
         # Depth
         tk.Label(grid_frame, text="Depth:", font=("Consolas", 9, "bold"), bg=COLORS['bg_panel'], fg=COLORS['text_secondary'], anchor="e").grid(row=2, column=0, sticky="e", padx=5, pady=8)
@@ -260,6 +261,44 @@ class TradingTerminalGUI:
             self.write_log(f"Control search error: {e}")
             return None, None, None, None
 
+    def _check_error_popup(self):
+        """Checks for and closes the specific No Data error popup. Returns True if found."""
+        try:
+            # Look for "Error" title
+            popup = self.desktop.window(title="Error", control_type="Window")
+            if not popup.exists(timeout=0.1):
+                return False
+                
+            # Verify text content
+            is_no_data = False
+            try:
+                txt = popup.window_text()
+                if "Error" in txt: 
+                     # Double check internal text to be sure it's the specific error? 
+                     # User said "no market replay data available"
+                     for child in popup.descendants(control_type="Text"):
+                        if "no market replay data" in child.window_text().lower():
+                            is_no_data = True
+                            break
+            except: 
+                # If we can't read descendants, maybe just trust the title "Error" in this context?
+                # But let's assume if it exists and we just clicked download, it's the one.
+                is_no_data = True 
+            
+            if is_no_data:
+                self.write_log("  ⚠ No Data Popup detected.")
+                # Close it
+                try:
+                    ok_btn = popup.child_window(title="OK", control_type="Button")
+                    if ok_btn.exists(): ok_btn.click()
+                    else: popup.close()
+                except: pass
+                return True
+                
+        except Exception as e:
+            pass
+        return False
+
     def mining_worker(self):
         try:
             if self.stop_requested: return
@@ -291,7 +330,8 @@ class TradingTerminalGUI:
                     break
                 
                 # Bring to front once
-                window.set_focus()
+                try: window.set_focus()
+                except: pass
                 
                 # Set Instrument
                 self.write_log(f"Setting Instrument: {current_contract}")
@@ -318,128 +358,113 @@ class TradingTerminalGUI:
                     date_str = current_date.strftime("%m/%d/%Y")
                     self.write_log(f"Checking {date_str}...")
                     
-                    # Set Date (Target all date fields found to be safe)
-                    for de in date_edits:
-                        try:
-                            de.set_edit_text(date_str)
-                        except: pass
-                    
-                    # === ROBUST DOWNLOAD LOGIC ===
-                    
-                    # 1. Wait until button is enabled (Ready to download)
-                    wait_ready = 0
-                    while not dl_btn.is_enabled() and wait_ready < 10:
-                        time.sleep(0.5)
-                        wait_ready += 0.5
-                    
-                    if not dl_btn.is_enabled():
-                        self.write_log("Warning: Button stuck disabled. Trying anyway...")
-
-                    # 2. Click Download
-                    try:
-                        dl_btn.click()
-                    except Exception as e:
-                        try: dl_btn.invoke()
-                        except: self.write_log("Click failed")
-                    
-                    # 3. Wait for button to DISABLE (indicates download started)
-                    # Give it up to 2 seconds to register the click and disable
-                    clicked_wait = 0
-                    download_started = False
-                    while clicked_wait < 3.0:
-                        if not dl_btn.is_enabled():
-                            download_started = True
-                            break
-                        time.sleep(0.2)
-                        clicked_wait += 0.2
-                        
-                    if download_started:
-                        # 4. Wait for button to RE-ENABLE (indicates download finished)
-                        # This is the "grey" state check user requested
-                        wait_download = 0
-                        while not dl_btn.is_enabled():
-                            if self.stop_requested: break
-                            time.sleep(0.5)
-                            wait_download += 0.5
-                            if wait_download > 120: # 2 min max for one day?
-                                self.write_log("Timeout waiting for download finish")
-                                break
-                                
-                        # 5. Wait 1 second buffer as requested
-                        time.sleep(1.0)
-                    else:
-                        # If it never disabled, maybe it was instant (cached) or click missed?
-                        # We'll just wait a standard buffer
-                        self.write_log("Download likely instant (or click missed)")
-                        time.sleep(1.0)
-
-                    # Check for File existence (Secondary Validation)
+                    # === SCAN EXISTING DATA FIRST ===
                     year = current_date.year
                     month = str(current_date.month).zfill(2)
                     day = str(current_date.day).zfill(2)
                     expected_filename = f"{year}{month}{day}.nrd"
-                    
                     docs_path = os.path.join(os.path.expanduser("~"), "Documents")
                     replay_path = os.path.join(docs_path, "NinjaTrader 8", "db", "replay", current_contract, expected_filename)
                     
                     if os.path.exists(replay_path):
-                        self.write_log(f"  ✓ SUCCESS")
-                        consecutive_misses = 0 
+                        self.write_log(f"  ✓ Already Exists (Skip)")
                         downloaded_count += 1
-                    else:
-                        # Only log failure if we actually expected a download and didn't find it
-                        # But sometimes NT8 says "No data" and we need to handle that popup
-                        self.write_log(f"  ? Checking data/popups...")
-                        # If file not found, it might simply be missing data.
-                        consecutive_misses += 1
-
-                    # Handle Popups (Data Not Found, etc)
-                    # We specifically look for the "Error" window shown in the screenshot
-                    # Text: "There is no market replay data available for the instrument/date."
-                    popup_detected = False
-                    try:
-                        # 1. Look for generic "Error" or "NinjaTrader" titled windows
-                        # The screenshot shows title "Error"
-                        popup = self.desktop.window(title="Error", control_type="Window")
-                        if not popup.exists(timeout=0.2):
-                             popup = self.desktop.window(title="NinjaTrader", control_type="Window")
-                        
-                        if popup.exists(timeout=0.2):
-                            # Check for text content to confirm it's the "No Data" error
-                            # We search all text children
-                            is_no_data = False
-                            try:
-                                for child in popup.descendants(control_type="Text"):
-                                    if "no market replay data" in child.window_text():
-                                        is_no_data = True
-                                        break
-                            except: pass
-                            
-                            if is_no_data or popup.window_text() == "Error":
-                                self.write_log("  ⚠ No Data Popup detected.")
-                                popup_detected = True
-                                # Close it
-                                ok_btn = popup.child_window(title="OK", control_type="Button")
-                                if ok_btn.exists():
-                                    ok_btn.click()
-                    except Exception as e:
-                        # self.write_log(f"Popup check error: {e}")
-                        pass
+                        current_date -= timedelta(days=1)
+                        self.progress_label.config(text=f"Total: {downloaded_count} | Streak: {consecutive_misses}")
+                        continue
                     
-                    if popup_detected:
-                        # Ensure we count this as a miss if we didn't already (e.g. if file check failed)
-                        # We previously incremented consecutive_misses in the 'else' block of file check
-                        # If file check PASSED (rare if popup appeared), we need to correct it?
-                        # Actually if popup appeared, file definitely won't exist.
-                        # So consecutive_misses is already incremented in the 'else' above.
-                        # We just update the label to be specific.
-                        self.progress_label.config(text=f"Total: {downloaded_count} | Streak: {consecutive_misses} (No Data)")
-                    elif not os.path.exists(replay_path):
-                         self.progress_label.config(text=f"Total: {downloaded_count} | Streak: {consecutive_misses} (File Missing)")
+                    # Set Date
+                    for de in date_edits:
+                        try: de.set_edit_text(date_str)
+                        except: pass
+                    
+                    # === ROBUST BUTTON CLICK & REACTION CHECK ===
+                    
+                    # 1. Wait until button is enabled
+                    wait_ready = 0
+                    while not dl_btn.is_enabled() and wait_ready < 5:
+                        # Also check for popup here, in case previous one lingered?
+                        if self._check_error_popup(): 
+                            self.write_log("  (Cleared lingering popup)")
+                        
+                        time.sleep(0.5)
+                        wait_ready += 0.5
+                    
+                    # 2. Click Download
+                    try:
+                        if dl_btn.is_enabled():
+                            dl_btn.click()
+                        else:
+                            self.write_log("Warning: Button disabled, attempting invoke...")
+                            dl_btn.invoke()
+                    except Exception as e:
+                        self.write_log(f"Click Exception: {e}")
 
-                    # If we hit the limit (e.g., 5 misses), the loop 'while consecutive_misses < stop_loss_limit'
-                    # will break naturally, and we will fall through to the contract switching logic below.
-                    # This restores the "Deep History" cycling functionality.
+                    # 3. POLL FOR OUTCOME (Critical Phase)
+                    # We expect either:
+                    # A) Button Disables (Download Started) -> Good
+                    # B) Error Popup Appears (No Data) -> Bad/Miss
+                    # C) Nothing happens (Timeout) -> Bad
+                    
+                    outcome = "unknown"
+                    poll_duration = 0
+                    while poll_duration < 3.0:
+                        # Check Error
+                        if self._check_error_popup():
+                            outcome = "error"
+                            break
+                        
+                        # Check Button State (Disabled = Started)
+                        if not dl_btn.is_enabled():
+                            outcome = "started"
+                            break
+                            
+                        time.sleep(0.1)
+                        poll_duration += 0.1
+                        
+                    if outcome == "error":
+                        consecutive_misses += 1
+                        self.progress_label.config(text=f"Total: {downloaded_count} | Streak: {consecutive_misses} (Error Popup)")
+                        # We handled the popup inside _check_error_popup
+                        
+                    elif outcome == "started":
+                        # 4. Wait for download to finish (Button becomes Enabled again)
+                        wait_download = 0
+                        while not dl_btn.is_enabled():
+                            if self.stop_requested: break
+                            
+                            # Just in case an error pops up LATE (weird, but possible)
+                            if self._check_error_popup():
+                                outcome = "error_late"
+                                break
+                                
+                            time.sleep(0.5)
+                            wait_download += 0.5
+                            if wait_download > 120:
+                                self.write_log("Timeout waiting for download finish")
+                                break
+                        
+                        if outcome == "error_late":
+                            consecutive_misses += 1
+                            self.progress_label.config(text=f"Total: {downloaded_count} | Streak: {consecutive_misses} (Late Error)")
+                        else:
+                            # Success!
+                            self.write_log(f"  ✓ SUCCESS")
+                            consecutive_misses = 0 
+                            downloaded_count += 1
+                            time.sleep(1.0) # Throttle as requested
+                            
+                    else:
+                        # Timeout / Unknown state
+                        self.write_log("  ? No reaction from button/app.")
+                        # Could be instant download? Check file
+                        time.sleep(0.5)
+                        if os.path.exists(replay_path):
+                            self.write_log("  (File found despite no UI reaction)")
+                            downloaded_count += 1
+                            consecutive_misses = 0
+                        else:
+                            consecutive_misses += 1
 
                     current_date -= timedelta(days=1)
                     self.progress_label.config(text=f"Total: {downloaded_count} | Streak: {consecutive_misses}")
@@ -455,9 +480,10 @@ class TradingTerminalGUI:
             self.write_log("\n✓ MINING COMPLETE")
 
         except Exception as e:
-            self.write_log(f"ERROR: {e}")
+            self.write_log(f"CRITICAL CRASH: {e}")
             import traceback
             self.write_log(traceback.format_exc())
+            messagebox.showerror("Crash Detected", f"An error occurred:\n{e}")
         finally:
             self.start_btn.config(state="normal")
             self.stop_btn.config(state="disabled")
