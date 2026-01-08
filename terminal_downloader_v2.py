@@ -73,7 +73,7 @@ class TradingTerminalGUI:
             img_path = "helper_preview.png"
             if os.path.exists(img_path):
                 raw_img = Image.open(img_path)
-                target_width = 1080
+                target_width = 1130
                 w_percent = (target_width / float(raw_img.size[0]))
                 h_size = int((float(raw_img.size[1]) * float(w_percent)))
                 if h_size > canvas_height:
@@ -85,37 +85,12 @@ class TradingTerminalGUI:
         except Exception as e:
             print(f"Could not load image: {e}")
 
-        # Instruction Text
-        instruction_lines = [
-            "Instructions:",
-            "1. Open NinjaTrader 8 -> Tools -> Historical Data",
-            "2. Ensure the 'Get Market Replay Data' panel is OPEN",
-            "3. Select Start Contract & Configuration below",
-            "4. Click START MINING"
-        ]
-        
-        text_center_x = 550
-        text_start_y = 20
-        line_height = 25
-        
-        for i, line in enumerate(instruction_lines):
-            y = text_start_y + (i * line_height)
-            if i == 0:
-                font_spec = ("Consolas", 12, "bold")
-                color = COLORS['accent_gold']
-            else:
-                font_spec = ("Consolas", 9, "bold")
-                color = "white"
-                
-            self.instr_canvas.create_text(text_center_x + 1, y + 1, text=line, anchor="center", font=font_spec, fill="black")
-            self.instr_canvas.create_text(text_center_x, y, text=line, anchor="center", font=font_spec, fill=color)
-
         # === MAIN CONTAINER ===
         main_container = tk.Frame(root, bg=COLORS['bg_dark'])
         main_container.pack(fill="both", expand=True, padx=10, pady=10)
         
         # === LEFT PANEL: Configuration ===
-        left_panel = tk.Frame(main_container, bg=COLORS['bg_panel'], width=500)
+        left_panel = tk.Frame(main_container, bg=COLORS['bg_panel'], width=400)
         left_panel.pack(side="left", fill="both", padx=(0, 5), pady=0)
         
         config_title = tk.Label(left_panel, text="CONFIGURATION", font=("Consolas", 11, "bold"), bg=COLORS['bg_panel'], fg=COLORS['accent_gold'], anchor="w")
