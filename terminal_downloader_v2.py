@@ -39,7 +39,7 @@ class TradingTerminalGUI:
     def __init__(self, root):
         self.root = root
         self.root.title(f"NT8 MARKET REPLAY MINER v{VERSION} (AUTO-HOOK)")
-        self.root.geometry("1100x1000")
+        self.root.geometry("1150x1000")
         self.root.configure(bg=COLORS['bg_dark'])
         
         # Custom style
@@ -115,10 +115,10 @@ class TradingTerminalGUI:
         main_container.pack(fill="both", expand=True, padx=10, pady=10)
         
         # === LEFT PANEL: Configuration ===
-        left_panel = tk.Frame(main_container, bg=COLORS['bg_panel'], width=450)
+        left_panel = tk.Frame(main_container, bg=COLORS['bg_panel'], width=500)
         left_panel.pack(side="left", fill="both", padx=(0, 5), pady=0)
         
-        config_title = tk.Label(left_panel, text="▸ CONFIGURATION", font=("Consolas", 11, "bold"), bg=COLORS['bg_panel'], fg=COLORS['accent_gold'], anchor="w")
+        config_title = tk.Label(left_panel, text="CONFIGURATION", font=("Consolas", 11, "bold"), bg=COLORS['bg_panel'], fg=COLORS['accent_gold'], anchor="w")
         config_title.pack(fill="x", padx=15, pady=(15, 10))
         
         grid_frame = tk.Frame(left_panel, bg=COLORS['bg_panel'])
@@ -162,7 +162,7 @@ class TradingTerminalGUI:
         right_panel = tk.Frame(main_container, bg=COLORS['bg_panel'])
         right_panel.pack(side="right", fill="both", expand=True, padx=(5, 0), pady=0)
         
-        log_title = tk.Label(right_panel, text="▸ ACTIVITY LOG", font=("Consolas", 11, "bold"), bg=COLORS['bg_panel'], fg=COLORS['accent_gold'], anchor="w")
+        log_title = tk.Label(right_panel, text="ACTIVITY LOG", font=("Consolas", 11, "bold"), bg=COLORS['bg_panel'], fg=COLORS['accent_gold'], anchor="w")
         log_title.pack(fill="x", padx=15, pady=(15, 10))
         
         self.log = scrolledtext.ScrolledText(right_panel, height=20, font=("Consolas", 9), bg=COLORS['bg_dark'], fg=COLORS['accent_green'], state="disabled")
