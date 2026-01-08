@@ -87,11 +87,11 @@ class TradingTerminalGUI:
 
         # Instruction Text
         instruction_lines = [
-            "V2 Auto-Hook Operation",
+            "Instructions:",
             "1. Open NinjaTrader 8 -> Tools -> Historical Data",
-            "2. Ensure the window is visible",
+            "2. Ensure the 'Get Market Replay Data' panel is OPEN",
             "3. Select Start Contract & Configuration below",
-            "4. Click START MINING - The tool will attach automatically"
+            "4. Click START MINING"
         ]
         
         text_center_x = 550
@@ -151,20 +151,12 @@ class TradingTerminalGUI:
         tk.Label(depth_frame, text="contracts back", bg=COLORS['bg_panel'], fg=COLORS['text_muted'], font=("Consolas", 8)).pack(side="left", padx=5)
 
         # Stop Loss
-        tk.Label(grid_frame, text="Stop Loss:", font=("Consolas", 9, "bold"), bg=COLORS['bg_panel'], fg=COLORS['text_secondary'], anchor="e").grid(row=3, column=0, sticky="e", padx=5, pady=8)
+        tk.Label(grid_frame, text="Stop after X failures:", font=("Consolas", 9, "bold"), bg=COLORS['bg_panel'], fg=COLORS['text_secondary'], anchor="e").grid(row=3, column=0, sticky="e", padx=5, pady=8)
         stop_frame = tk.Frame(grid_frame, bg=COLORS['bg_panel'])
         stop_frame.grid(row=3, column=1, sticky="w", padx=5, pady=8)
         self.stop_loss_spin = tk.Spinbox(stop_frame, from_=3, to=30, width=5, font=("Consolas", 10))
         self.stop_loss_spin.delete(0, tk.END); self.stop_loss_spin.insert(0, "5")
         self.stop_loss_spin.pack(side="left")
-        
-        # Timeout
-        tk.Label(grid_frame, text="Timeout:", font=("Consolas", 9, "bold"), bg=COLORS['bg_panel'], fg=COLORS['text_secondary'], anchor="e").grid(row=4, column=0, sticky="e", padx=5, pady=8)
-        time_frame = tk.Frame(grid_frame, bg=COLORS['bg_panel'])
-        time_frame.grid(row=4, column=1, sticky="w", padx=5, pady=8)
-        self.wait_spinbox = tk.Spinbox(time_frame, from_=3, to=60, width=5, font=("Consolas", 10))
-        self.wait_spinbox.delete(0, tk.END); self.wait_spinbox.insert(0, "8")
-        self.wait_spinbox.pack(side="left")
 
         # === RIGHT PANEL: Log ===
         right_panel = tk.Frame(main_container, bg=COLORS['bg_panel'])
@@ -311,8 +303,6 @@ class TradingTerminalGUI:
             except: max_contracts_back = 4
             try: stop_loss_limit = int(self.stop_loss_spin.get())
             except: stop_loss_limit = 5
-            try: wait_time_setting = int(self.wait_spinbox.get())
-            except: wait_time_setting = 8
             
             current_contract = self.inst_combo.get().strip()
             contracts_processed = 0
@@ -443,8 +433,8 @@ class TradingTerminalGUI:
                                 
                             time.sleep(0.5)
                             wait_download += 0.5
-                            if wait_download > 120:
-                                self.write_log("Timeout waiting for download finish")
+                            if wait_download > 300: # 5 minutes max
+                                self.write_log(f"Timeout waiting for download finish (> 5m)")
                                 break
                         
                         if outcome == "error_late":
