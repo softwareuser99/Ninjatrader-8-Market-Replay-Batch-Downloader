@@ -14,8 +14,10 @@ from pywinauto.findwindows import ElementNotFoundError
 
 import pyautogui # Added back for robust popup handling
 
+import ctypes
+
 # Professional Trading Terminal Color Scheme (Kept from V1)
-VERSION = "2.02"
+VERSION = "2.05"
 
 COLORS = {
     'bg_dark': '#0a1612',
@@ -265,53 +267,35 @@ class TradingTerminalGUI:
             return None, None, None, None
 
     def _check_error_popup(self):
-        """Checks for and closes the specific No Data error popup. Returns True if found."""
+        """Checks if the FOREGROUND window is an error popup and closes it."""
         try:
-            # Look for "Error" title
-            popup = self.desktop.window(title="Error", control_type="Window")
-            if not popup.exists(timeout=0.1):
-                return False
-                
-            # Verify text content
-            is_no_data = False
-            try:
-                txt = popup.window_text()
-                if "Error" in txt: 
-                     # Double check internal text to be sure it's the specific error? 
-                     # User said "no market replay data available"
-                     for child in popup.descendants(control_type="Text"):
-                        if "no market replay data" in child.window_text().lower():
-                            is_no_data = True
-                            break
-            except: 
-                # If we can't read descendants, maybe just trust the title "Error" in this context?
-                # But let's assume if it exists and we just clicked download, it's the one.
-                is_no_data = True 
+            # Low-level approach: What is the user actually looking at?
+            hwnd = ctypes.windll.user32.GetForegroundWindow()
+            length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+            buff = ctypes.create_unicode_buffer(length + 1)
+            ctypes.windll.user32.GetWindowTextW(hwnd, buff, length + 1)
+            title = buff.value
             
-            if is_no_data:
-                self.write_log("  ⚠ No Data Popup detected.")
-                try:
-                    # Method 1: Focus and Invoke OK
-                    popup.set_focus()
-                    ok_btn = popup.child_window(title="OK", control_type="Button")
-                    if ok_btn.exists():
-                        try: ok_btn.invoke()
-                        except: ok_btn.click_input() # forceful click
-                    else:
-                        # Method 2: Enter Key
-                        popup.type_keys('{ENTER}')
-                except:
-                    # Method 3: Esc Key or Close
-                    try: popup.type_keys('{ESC}')
-                    except: popup.close()
+            # If the active window is the Error popup, nuke it.
+            # Usually "Error" or "NinjaTrader"
+            if title == "Error" or title == "NinjaTrader":
                 
-                # Verify it's gone
-                time.sleep(0.2)
-                if popup.exists():
-                    # Last resort
-                    try: popup.close()
-                    except: pass
-                    
+                # Check for "Historical Data" title to AVOID killing main window
+                if "Historical Data" in title:
+                    return False
+                
+                self.write_log(f"  ⚠ Active Popup detected: '{title}'. DISMISSING.")
+                
+                # Active window is the popup. Just press Enter.
+                time.sleep(0.1) 
+                pyautogui.press('enter')
+                time.sleep(0.1)
+                
+                # Verify it's gone. If not, ESC.
+                hwnd_new = ctypes.windll.user32.GetForegroundWindow()
+                if hwnd == hwnd_new:
+                     pyautogui.press('escape')
+                
                 return True
                 
         except Exception as e:
