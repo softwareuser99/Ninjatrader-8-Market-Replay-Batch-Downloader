@@ -12,7 +12,11 @@ from PIL import Image, ImageTk
 from pywinauto import Desktop
 from pywinauto.findwindows import ElementNotFoundError
 
+import pyautogui # Added back for robust popup handling
+
 # Professional Trading Terminal Color Scheme (Kept from V1)
+VERSION = "2.02"
+
 COLORS = {
     'bg_dark': '#0a1612',
     'bg_medium': '#0d2117',
@@ -32,7 +36,7 @@ COLORS = {
 class TradingTerminalGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("NT8 MARKET REPLAY MINER V2 (AUTO-HOOK)")
+        self.root.title(f"NT8 MARKET REPLAY MINER v{VERSION} (AUTO-HOOK)")
         self.root.geometry("1100x1000")
         self.root.configure(bg=COLORS['bg_dark'])
         
@@ -52,12 +56,11 @@ class TradingTerminalGUI:
         header = tk.Frame(root, bg=COLORS['bg_medium'], height=60)
         header.pack(fill="x", padx=0, pady=0)
         
-        title = tk.Label(header, text="⚡ NT8 DEEP HISTORY MINER V2",
+        title = tk.Label(header, text=f"⚡ NT8 DEEP HISTORY MINER v{VERSION}",
                         font=("Consolas", 18, "bold"),
                         bg=COLORS['bg_medium'],
                         fg=COLORS['accent_green'])
         title.pack(pady=15)
-        
         # === INSTRUCTIONS CANVAS (Top) ===
         canvas_height = 200 
         self.instr_canvas = tk.Canvas(root, bg=COLORS['bg_panel'], height=canvas_height, highlightthickness=0)
@@ -287,12 +290,28 @@ class TradingTerminalGUI:
             
             if is_no_data:
                 self.write_log("  ⚠ No Data Popup detected.")
-                # Close it
                 try:
+                    # Method 1: Focus and Invoke OK
+                    popup.set_focus()
                     ok_btn = popup.child_window(title="OK", control_type="Button")
-                    if ok_btn.exists(): ok_btn.click()
-                    else: popup.close()
-                except: pass
+                    if ok_btn.exists():
+                        try: ok_btn.invoke()
+                        except: ok_btn.click_input() # forceful click
+                    else:
+                        # Method 2: Enter Key
+                        popup.type_keys('{ENTER}')
+                except:
+                    # Method 3: Esc Key or Close
+                    try: popup.type_keys('{ESC}')
+                    except: popup.close()
+                
+                # Verify it's gone
+                time.sleep(0.2)
+                if popup.exists():
+                    # Last resort
+                    try: popup.close()
+                    except: pass
+                    
                 return True
                 
         except Exception as e:
